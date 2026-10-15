@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Responsive p5.js Shape Synthesizer</title>
+  <!-- Load p5.js and p5.sound libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
+  <style>
+    /* Remove default margins and make canvas fill the screen without scrolling */
+    body { margin: 0; padding: 0; overflow: hidden; background-color: #1a1a1a; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <script>
+    let audioStarted = false;
+    let circleOsc;
+    let circlePlaying = false;
+    
+    // Variables for responsive layout
+    let positions = [];
+    let shapeSize;
+
+    function setup() {
+      // Create a canvas that fills the entire browser window
+      createCanvas(windowWidth, windowHeight);
+      rectMode(CENTER);
+      textAlign(CENTER, CENTER);
+      
+      calculateLayout();
+      
+      // Setup the continuous circle oscillator
+      circleOsc = new p5.Oscillator('sine');
+      circleOsc.freq(261.63); // Middle C
+      circleOsc.amp(0);
+      circleOsc.start();
+    }
+
+    // Automatically called by p5.js when the browser window is resized
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+      calculateLayout();
+    }
+
+    // Calculates positions and sizes based on screen aspect ratio
+    function calculateLayout() {
+      positions = [];
+      if (width > height) {
+        // Landscape mode: 4 columns, 1 row
+        shapeSize = min(width / 4, height) * 0.55;
+        for (let i = 0; i < 4; i++) {
+          positions.push({ x: width * (0.125 + i * 0.25), y: height / 2 });
+        }
+      } else {
+        // Portrait mode (mobile): 2 columns, 2 rows
+        shapeSize = min(width / 2, height / 2) * 0.55;
+        positions.push({ x: width * 0.25, y: height * 0.25 }); // Top-Left
+        positions.push({ x: width * 0.75, y: height * 0.25 }); // Top-Right
+        positions.push({ x: width * 0.25, y: height * 0.75 }); // Bottom-Left
+        positions.push({ x: width * 0.75, y: height * 0.75 }); // Bottom-Right
+      }
+    }
+
+    function draw() {
+      background(30);
+
+      if (!audioStarted) {
+        fill(255);
+        textSize(min(width, height) * 0.05);
+        text("Tap anywhere to unlock audio", width/2, height/2);
+        return;
+      }
+
+      // 1. Draw Circle (Red)
+      fill(circlePlaying ? '#ff6666' : '#E63946');
+      noStroke();
+      circle(positions[0].x, positions[0].y, shapeSize);
+
+      // 2. Draw Triangle (Blue)
+      fill('#457B9D');
+      triangle(
+        positions[1].x, positions[1].y - shapeSize/2, 
+        positions[1].x - shapeSize/2, positions[1].y + shapeSize/2, 
+        positions[1].x + shapeSize/2, positions[1].y + shapeSize/2
+      );
+
+      // 3. Draw Square (Yellow)
+      fill('#F4A261');
+      square(positions[2].x, positions[2].y, shapeSize);
+
+      // 4. Draw Pentagon (Green)
+      fill('#2A9D8F');
+      drawPentagon(positions[3].x, positions[3].y, shapeSize / 2);
+    }
+
+    // Helper to draw a polygon
+    function drawPentagon(x, y, radius) {
+      beginShape();
+      for (let i = 0; i < 5; i++) {
+        let angle = TWO_PI / 5 * i - HALF_PI;
+        let vx = x + cos(angle) * radius;
+        let vy = y + sin(angle) * radius;
+        vertex(vx, vy);
+      }
+      endShape(CLOSE);
+    }
+
+    function mousePressed() {
+      if (!audioStarted) {
+        userStartAudio();
+        audioStarted = true;
+        return;
+      }
+
+      let r = shapeSize / 2;
+
+      // Check Circle Hit (Distance from center)
+      if (dist(mouseX, mouseY, positions[0].x, positions[0].y) < r) {
+        circlePlaying = !circlePlaying;
+        circleOsc.amp(circlePlaying ? 0.3 : 0, 0.1);
+      }
+      
+      // Check Triangle Hit (Bounding box for simplicity)
+      else if (abs(mouseX - positions[1].x) < r && abs(mouseY - positions[1].y) < r) {
+        playTriangle();
+      }
+      
+      // Check Square Hit (Bounding box)
+      else if (abs(mouseX - positions[2].x) < r && abs(mouseY - positions[2].y) < r) {
+        playSquare();
+      }
+      
+      // Check Pentagon Hit (Distance from center)
+      else if (dist(mouseX, mouseY, positions[3].x, positions[3].y) < r) {
+        playPentagon();
+      }
+    }
+
+    // --- Sound Synthesis Functions ---
+
+    function playTriangle() {
+      let osc = new p5.Oscillator('triangle');
+      let env = new p5.Envelope(0.01, 0.4, 0.1, 0);
+      osc.freq(880); 
+      osc.start();
+      
+      for (let i = 0; i < 3; i++) {
+        setTimeout(() => {
+          env.play(osc, 0, 0.1);
+        }, i * 200);
+      }
+      setTimeout(() => osc.stop(), 1000);
+    }
+
+    function playSquare() {
+      let freqs = [261.63, 349.23, 392.00, 523.25]; 
+      
+      freqs.forEach(f => {
+        let osc = new p5.Oscillator('sine');
+        let env = new p5.Envelope(0.05, 0.2, 0.5, 1.5);
+        osc.freq(f);
+        osc.start();
+        env.play(osc, 0, 0.1);
+        setTimeout(() => osc.stop(), 2000);
+      });
+    }
+
+    function playPentagon() {
+      let osc1 = new p5.Oscillator('square'); 
+      let osc2 = new p5.Oscillator('square'); 
+      osc1.start(); 
+      osc2.start();
+      
+      let env1 = new p5.Envelope(0.01, 0.2, 0.05, 0);
+      let env2 = new p5.Envelope(0.01, 0.1, 0.05, 0);
+      
+      let duration = 1200; 
+      
+      for (let i = 0; i < 5; i++) {
+        setTimeout(() => {
+          osc1.freq(440);
+          env1.play(osc1, 0, 0.1);
+        }, i * (duration / 5));
+      }
+      
+      for (let i = 0; i < 4; i++) {
+        setTimeout(() => {
+          osc2.freq(220); 
+          env2.play(osc2, 0, 0.1);
+        }, i * (duration / 4));
+      }
+      
+      setTimeout(() => { osc1.stop(); osc2.stop(); }, duration + 500);
+    }
+  </script>
+</body>
+</html>
